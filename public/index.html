@@ -1685,16 +1685,14 @@ function addEv(type,msg,time){ const log=document.getElementById('ev-log'); if(!
 // ═══ INTRO + START ═══
 function startGame(diff){
   document.getElementById('intro').style.opacity='0';
+  document.getElementById('intro').style.transition='opacity .8s';
   setTimeout(()=>{
     document.getElementById('intro').style.display='none';
     document.getElementById('sim').classList.add('show');
-    socket.emit('startGame',diff);
-    // Pedir permiso de notificaciones automáticamente
-    requestNotifications().then(()=>{
-      const btn=document.getElementById('notif-btn');
-      if(btn) btn.style.cssText='background:rgba(0,255,156,.1);border:1px solid var(--green);color:var(--green);padding:3px 8px;border-radius:4px;font-family:Share Tech Mono,monospace;font-size:8px;cursor:pointer;';
-    });
-  },800);
+    socket.emit('startGame', diff);
+    try{ requestNotifications(); } catch(e){}
+    try{ initAudio(); } catch(e){}
+  }, 800);
 }
 
 
