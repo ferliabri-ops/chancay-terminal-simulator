@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Puerto Chancay — Terminal Operations Simulator</title>
+<script src="/socket.io/socket.io.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Exo+2:wght@300;400;500;600&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --void:#020B08;--panel:#061F16;--surface:#0A2D1E;--edge:#0F4A30;--edge2:#1A6040;
+  --green:#00FF9C;--green2:#00CC7A;--gold:#FFD700;--gold2:#FFA500;
+  --red:#FF2D55;--blue:#00D4FF;--purple:#BF5FFF;--amber:#FFB300;--teal:#00E5CC;
+  --text:#E0FFF0;--muted:#2A6045;
+  --easy:#00FF9C;--medium:#FFB300;--hard:#FF6B35;--expert:#FF2D55;
+}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--void);font-family:'Exo 2',sans-serif;color:var(--text);}
+.mono{font-family:'Share Tech Mono',monospace;}
+.orb{font-family:'Orbitron',sans-serif;}
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,255,156,.007) 3px,rgba(0,255,156,.007) 4px);pointer-events:none;z-index:9998;}
+
+/* INTRO */
+#intro{position:fixed;inset:0;z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--void);overflow:hidden;}
+.stars{position:absolute;inset:0;}
+.star{position:absolute;width:2px;height:2px;background:var(--green);border-radius:50%;animation:twinkle var(--d,3s) ease-in-out infinite;opacity:0;}
+@keyframes twinkle{0%,100%{opacity:0}50%{opacity:var(--op,.8)}}
+.ocean{position:absolute;bottom:0;left:0;right:0;height:35%;background:linear-gradient(180deg,#001A0F,#003A22);}
+.wave{position:absolute;width:200%;height:60px;background:linear-gradient(90deg,transparent,rgba(0,255,156,.08),rgba(0,212,255,.06),transparent);animation:wv 8s linear infinite;}
+.wave:nth-child(2){bottom:15px;animation-duration:12s;animation-delay:-4s;opacity:.6;}
+.wave:nth-child(3){bottom:0;animation-duration:6s;animation-delay:-2s;opacity:.4;}
+@keyframes wv{0%{transform:translateX(-50%)}100%{transform:translateX(0%)}}
+.ship-sail{position:absolute;bottom:36%;font-size:28px;animation:sail var(--dur,30s) linear infinite;opacity:.4;}
+@keyframes sail{from{transform:translateX(-100px)}to{transform:translateX(calc(100vw + 100px))}}
+.intro-content{position:relative;z-index:2;text-align:center;}
+.intro-badge{font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:4px;color:var(--green);text-transform:uppercase;margin-bottom:20px;opacity:0;animation:fu .8s ease .5s both;}
+.intro-title{font-family:'Orbitron',sans-serif;font-size:clamp(36px,7vw,80px);font-weight:900;line-height:.9;letter-spacing:-2px;margin-bottom:16px;opacity:0;animation:fu .8s ease .8s both;}
+.intro-title .l1{color:var(--text);}
+.intro-title .l2{color:var(--green);text-shadow:0 0 40px rgba(0,255,156,.3);}
+.intro-sub{font-size:14px;color:var(--muted);font-weight:300;margin-bottom:48px;opacity:0;animation:fu .8s ease 1.1s both;letter-spacing:2px;}
+@keyframes fu{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
+.diff-label{font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:3px;color:var(--muted);text-transform:uppercase;margin-bottom:20px;opacity:0;animation:fu .8s ease 1.4s both;}
+.diff-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;max-width:800px;opacity:0;animation:fu .8s ease 1.6s both;}
+.diff-card{background:rgba(0,0,0,.4);border:1px solid var(--edge);border-radius:12px;padding:20px 16px;cursor:pointer;transition:all .3s;}
+.diff-card:hover{transform:translateY(-4px);}
+.diff-card[data-d="easy"]:hover{border-color:var(--easy);box-shadow:0 0 20px rgba(0,255,156,.2);}
+.diff-card[data-d="medium"]:hover{border-color:var(--medium);box-shadow:0 0 20px rgba(255,179,0,.2);}
+.diff-card[data-d="hard"]:hover{border-color:var(--hard);box-shadow:0 0 20px rgba(255,107,53,.2);}
+.diff-card[data-d="expert"]:hover{border-color:var(--expert);box-shadow:0 0 20px rgba(255,45,85,.2);}
+.diff-icon{font-size:26px;margin-bottom:10px;}
+.diff-name{font-family:'Orbitron',sans-serif;font-size:13px;font-weight:700;margin-bottom:6px;}
+.dn-easy{color:var(--easy)}.dn-medium{color:var(--medium)}.dn-hard{color:var(--hard)}.dn-expert{color:var(--expert)}
+.diff-desc{font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:8px;}
+.diff-stats{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--edge2);}
+.diff-rec{font-size:9px;font-weight:700;padding:2px 7px;border-radius:100px;background:rgba(255,179,0,.15);color:var(--amber);border:1px solid rgba(255,179,0,.3);display:inline-block;margin-bottom:6px;}
+
+/* SIMULATOR */
+#sim{position:fixed;inset:0;display:none;flex-direction:column;}
+#sim.show{display:flex;}
+
+/* TOPBAR */
+.topbar{height:48px;background:var(--panel);border-bottom:1px solid var(--edge);display:flex;align-items:center;padding:0 14px;gap:12px;flex-shrink:0;}
+.tb-logo{font-family:'Orbitron',sans-serif;font-size:13px;font-weight:800;color:var(--green);letter-spacing:2px;white-space:nowrap;}
+.tb-logo span{color:var(--gold);}
+.tb-div{width:1px;height:24px;background:var(--edge);}
+.tb-kpi{display:flex;flex-direction:column;gap:1px;}
+.tb-lbl{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;}
+.tb-val{font-family:'Share Tech Mono',monospace;font-size:12px;font-weight:500;}
+.green{color:var(--green)}.gold{color:var(--gold)}.red{color:var(--red)}.amber{color:var(--amber)}.blue{color:var(--blue)}
+.tb-clock{font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--green);margin-left:auto;}
+.diff-badge{font-family:'Orbitron',sans-serif;font-size:9px;font-weight:700;padding:3px 10px;border-radius:100px;}
+.db-easy{background:rgba(0,255,156,.1);color:var(--easy);border:1px solid rgba(0,255,156,.3);}
+.db-medium{background:rgba(255,179,0,.1);color:var(--medium);border:1px solid rgba(255,179,0,.3);}
+.db-hard{background:rgba(255,107,53,.1);color:var(--hard);border:1px solid rgba(255,107,53,.3);}
+.db-expert{background:rgba(255,45,85,.1);color:var(--expert);border:1px solid rgba(255,45,85,.3);}
+.conn-dot{width:7px;height:7px;border-radius:50%;background:var(--red);animation:blink 1s infinite;}
+.conn-dot.on{background:var(--green);animation:pulse 2s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(0,255,156,.5)}50%{box-shadow:0 0 0 5px rgba(0,255,156,0)}}
+
+/* MAIN */
+.sim-body{display:flex;flex:1;overflow:hidden;}
+
+/* LEFT */
+.lp{width:190px;background:var(--panel);border-right:1px solid var(--edge);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;}
+.lp-sec{padding:12px;border-bottom:1px solid var(--edge);}
+.lp-ttl{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;}
+.kpi{margin-bottom:10px;}
+.kpi-lbl{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:2px;}
+.kpi-val{font-family:'Orbitron',sans-serif;font-size:18px;font-weight:700;color:var(--green);line-height:1;}
+.kpi-sub{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);margin-top:1px;}
+.kpi-bar{height:3px;background:var(--edge);border-radius:3px;overflow:hidden;margin-top:3px;}
+.kpi-fill{height:100%;border-radius:3px;transition:width .5s;}
+
+/* PROGRESS BAR */
+.shift-prog-wrap{padding:8px 12px;background:rgba(0,0,0,.3);border-bottom:1px solid var(--edge);}
+.prog-label{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:4px;display:flex;justify-content:space-between;}
+.prog-track{height:6px;background:var(--edge);border-radius:6px;overflow:hidden;}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--teal));border-radius:6px;transition:width .5s;}
+
+/* CANVAS */
+.canvas{flex:1;position:relative;overflow:hidden;background:var(--void);}
+.sky{position:absolute;top:0;left:0;right:0;height:28%;transition:background 3s;}
+.sky.morning{background:linear-gradient(180deg,#FF6B35,#FFB300 40%,#2A4A35);}
+.sky.day{background:linear-gradient(180deg,#001A40,#002A60 50%,#001A20);}
+.sky.night{background:linear-gradient(180deg,#000510,#000A20 60%,#000508);}
+.water{position:absolute;top:20%;left:0;right:0;height:18%;background:linear-gradient(180deg,#001A10,#002A18);overflow:hidden;}
+.wwave{position:absolute;width:200%;height:100%;opacity:.12;animation:wv2 6s linear infinite;}
+.wwave:nth-child(2){animation-duration:9s;animation-delay:-3s;opacity:.08;}
+@keyframes wv2{0%{transform:translateX(-50%)}100%{transform:translateX(0%)}}
+.berth-zone{position:absolute;top:16%;left:0;right:0;height:24%;display:flex;gap:8px;padding:6px 10px;align-items:flex-end;}
+.berth{flex:1;height:100%;background:rgba(0,20,12,.6);border:1px solid var(--edge);border-radius:4px;position:relative;overflow:hidden;}
+.berth-num{position:absolute;top:5px;left:7px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);}
+.b-dot{position:absolute;top:5px;right:7px;width:6px;height:6px;border-radius:50%;}
+.b-free{background:var(--green);box-shadow:0 0 6px var(--green);}
+.b-busy{background:var(--red);animation:blink 1s infinite;}
+.vessel-wrap{position:absolute;bottom:0;left:0;right:0;padding:4px;}
+.vbody{background:linear-gradient(135deg,rgba(29,78,216,.4),rgba(15,40,120,.6));border:1px solid rgba(56,189,248,.3);border-radius:3px;padding:6px;}
+.vname{font-family:'Orbitron',sans-serif;font-size:9px;font-weight:700;color:var(--blue);}
+.vinfo{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);margin-top:2px;}
+.vprogbar{height:2px;background:var(--edge);border-radius:2px;margin-top:4px;overflow:hidden;}
+.vprogfill{height:100%;background:linear-gradient(90deg,var(--blue),var(--green));transition:width 1s;}
+.cranes-row{display:flex;gap:3px;margin-top:4px;}
+.crane{width:10px;height:16px;position:relative;}
+.crane::before{content:'';position:absolute;top:0;left:4px;width:2px;height:10px;background:var(--amber);}
+.crane::after{content:'';position:absolute;top:0;left:1px;width:9px;height:2px;background:var(--amber);}
+.crane.on::before,.crane.on::after{box-shadow:0 0 4px var(--amber);}
+.yard-zone{position:absolute;top:40%;left:0;right:0;bottom:38px;padding:8px 10px;overflow:hidden;}
+.yard-grid{display:flex;flex-wrap:wrap;gap:6px;height:100%;align-content:flex-start;}
+.yblock{background:rgba(0,15,8,.7);border:1px solid var(--edge);border-radius:3px;padding:6px;}
+.ybh{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--green);letter-spacing:1px;margin-bottom:4px;display:flex;justify-content:space-between;}
+.yslots{display:grid;gap:1.5px;}
+.slot{width:14px;height:14px;border-radius:1px;cursor:pointer;transition:all .15s;border:1px solid transparent;}
+.slot:hover{transform:scale(1.4);z-index:10;}
+.s-imp{background:#1D4ED8;}.s-exp{background:#15803D;}.s-emp{background:#1F2937;opacity:.5;}
+.s-ref{background:#D97706;animation:rpulse 2s ease-in-out infinite;}
+.s-dam{background:#DC2626;}.s-imo{background:#7C3AED;}.s-ins{background:#EA580C;}
+.s-free{background:transparent;border:1px solid var(--edge);opacity:.25;}
+@keyframes rpulse{0%,100%{box-shadow:0 0 3px #D97706}50%{box-shadow:0 0 8px #D97706}}
+.trucker{position:absolute;font-size:12px;transition:all .5s linear;z-index:5;}
+.gate-bar{position:absolute;bottom:0;left:0;right:0;height:38px;background:var(--panel);border-top:1px solid var(--edge);display:flex;align-items:center;padding:0 10px;gap:10px;}
+.gate-lbl{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--amber);letter-spacing:2px;text-transform:uppercase;}
+.lane{width:34px;height:20px;border:1px solid var(--edge);border-radius:2px;display:flex;align-items:center;justify-content:center;font-family:'Share Tech Mono',monospace;font-size:8px;}
+.lane.in{border-color:rgba(0,255,156,.3);color:var(--green);}
+.lane.out{border-color:rgba(255,45,85,.3);color:var(--red);}
+.gate-st{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);margin-left:auto;}
+
+/* RIGHT */
+.rp{width:270px;background:var(--panel);border-left:1px solid var(--edge);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;}
+.rp-sec{padding:12px;border-bottom:1px solid var(--edge);}
+.rp-ttl{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:10px;}
+.shift-card{background:rgba(0,0,0,.3);border:1px solid var(--edge);border-radius:8px;padding:10px;}
+.shift-name{font-family:'Orbitron',sans-serif;font-size:13px;font-weight:700;color:var(--gold);margin-bottom:3px;}
+.shift-time{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);}
+.vc{background:rgba(0,0,0,.3);border:1px solid var(--edge);border-radius:6px;padding:10px;margin-bottom:8px;cursor:pointer;transition:all .2s;}
+.vc:hover{border-color:var(--blue);}
+.vc.sel{border-color:var(--green);background:rgba(0,255,156,.04);}
+.vc-name{font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;margin-bottom:4px;}
+.vc-row{display:flex;justify-content:space-between;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:2px;}
+.vc-val{color:var(--text);}
+.dec-lbl{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:5px;margin-top:10px;letter-spacing:1px;text-transform:uppercase;}
+.dec-opts{display:flex;gap:3px;flex-wrap:wrap;}
+.dbn{background:transparent;border:1px solid var(--edge);color:var(--muted);padding:5px 8px;border-radius:4px;font-family:'Share Tech Mono',monospace;font-size:9px;cursor:pointer;transition:all .2s;}
+.dbn:hover{border-color:var(--green);color:var(--green);}
+.dbn.sel{background:rgba(0,255,156,.1);border-color:var(--green);color:var(--green);}
+.exec-btn{width:100%;background:linear-gradient(135deg,var(--green),var(--green2));border:none;color:var(--void);padding:11px;border-radius:8px;font-family:'Orbitron',sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;cursor:pointer;transition:all .2s;margin-top:10px;}
+.exec-btn:hover:not(:disabled){transform:scale(1.02);box-shadow:0 0 20px rgba(0,255,156,.3);}
+.exec-btn:disabled{opacity:.4;cursor:not-allowed;}
+.pause-btn{width:100%;background:transparent;border:1px solid var(--amber);color:var(--amber);padding:8px;border-radius:8px;font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;cursor:pointer;transition:all .2s;margin-top:6px;}
+.pause-btn:hover{background:rgba(255,179,0,.1);}
+
+/* LIVE INSTRUCTIONS (during shift) */
+.instr-panel{background:rgba(0,0,0,.3);border:1px solid rgba(0,255,156,.2);border-radius:8px;padding:10px;margin-top:8px;}
+.instr-title{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--green);letter-spacing:1px;margin-bottom:8px;text-transform:uppercase;}
+.instr-row{display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap;}
+.instr-btn{background:rgba(0,0,0,.4);border:1px solid var(--edge);color:var(--muted);padding:4px 8px;border-radius:4px;font-family:'Share Tech Mono',monospace;font-size:9px;cursor:pointer;transition:all .2s;}
+.instr-btn:hover{border-color:var(--teal);color:var(--teal);}
+
+/* EVENT LOG */
+.ev-log{display:flex;flex-direction:column;gap:3px;max-height:160px;overflow-y:auto;}
+.ev{font-family:'Share Tech Mono',monospace;font-size:9px;padding:4px 7px;border-radius:3px;border-left:2px solid;}
+.ev.info{border-color:var(--blue);background:rgba(0,212,255,.04);color:var(--blue);}
+.ev.warn{border-color:var(--amber);background:rgba(255,179,0,.04);color:var(--amber);}
+.ev.danger{border-color:var(--red);background:rgba(255,45,85,.04);color:var(--red);}
+.ev.success{border-color:var(--green);background:rgba(0,255,156,.04);color:var(--green);}
+
+/* CRISIS */
+.crisis-overlay{position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:500;display:none;align-items:center;justify-content:center;}
+.crisis-overlay.show{display:flex;}
+.crisis-modal{background:var(--panel);border:2px solid var(--red);border-radius:12px;padding:28px;max-width:400px;width:90%;box-shadow:0 0 40px rgba(255,45,85,.25);animation:ci .4s ease;}
+@keyframes ci{from{transform:scale(.8);opacity:0}to{transform:scale(1);opacity:1}}
+.crisis-badge{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--red);text-transform:uppercase;margin-bottom:8px;}
+.crisis-timer{font-family:'Orbitron',sans-serif;font-size:32px;color:var(--red);text-align:center;margin:8px 0;}
+.crisis-title{font-family:'Orbitron',sans-serif;font-size:17px;font-weight:800;color:var(--text);margin-bottom:8px;}
+.crisis-desc{font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:18px;}
+.copt{background:rgba(0,0,0,.3);border:1px solid var(--edge);border-radius:8px;padding:10px 14px;cursor:pointer;transition:all .2s;text-align:left;margin-bottom:7px;width:100%;}
+.copt:hover{border-color:var(--amber);background:rgba(255,179,0,.05);}
+.copt-lbl{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--amber);letter-spacing:1px;margin-bottom:3px;}
+.copt-desc{font-size:11px;color:var(--muted);}
+
+/* REPORT */
+.rep-overlay{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:600;display:none;align-items:center;justify-content:center;}
+.rep-overlay.show{display:flex;}
+.rep-modal{background:var(--panel);border:1px solid var(--edge);border-radius:16px;padding:28px;max-width:460px;width:90%;max-height:90vh;overflow-y:auto;}
+.rep-title{font-family:'Orbitron',sans-serif;font-size:20px;font-weight:900;color:var(--gold);margin-bottom:4px;}
+.rep-sub{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:20px;letter-spacing:1px;}
+.score-big{font-family:'Orbitron',sans-serif;font-size:60px;font-weight:900;text-align:center;margin:12px 0;line-height:1;}
+.rep-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--edge);}
+.rep-row:last-child{border:none;}
+.rep-k{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);}
+.rep-v{font-family:'Orbitron',sans-serif;font-size:13px;font-weight:700;}
+.rep-bar{flex:1;height:3px;background:var(--edge);border-radius:3px;overflow:hidden;margin:0 10px;}
+.rep-fill{height:100%;border-radius:3px;}
+.next-btn{width:100%;background:linear-gradient(135deg,var(--gold),var(--gold2));border:none;color:var(--void);padding:13px;border-radius:8px;font-family:'Orbitron',sans-serif;font-size:12px;font-weight:800;letter-spacing:2px;cursor:pointer;margin-top:18px;transition:all .2s;}
+.next-btn:hover{transform:scale(1.02);box-shadow:0 0 20px rgba(255,215,0,.3);}
+
+::-webkit-scrollbar{width:3px;}
+::-webkit-scrollbar-track{background:var(--void);}
+::-webkit-scrollbar-thumb{background:var(--edge);border-radius:2px;}
+</style>
+</head>
+<body>
+
+<!-- INTRO -->
+<div id="intro">
+  <div class="stars" id="stars"></div>
+  <div class="ocean"><div class="wave"></div><div class="wave"></div></div>
+  <div class="ship-sail" style="--dur:25s">🚢</div>
+  <div class="ship-sail" style="--dur:40s;animation-delay:-15s;font-size:20px">🚢</div>
+  <div class="intro-content">
+    <div class="intro-badge mono">▸ TERMINAL OPERATIONS SIMULATOR — SERVIDOR 24/7</div>
+    <div class="intro-title"><div class="l1">PUERTO</div><div class="l2">CHANCAY</div></div>
+    <div class="intro-sub mono">HUB DEL PACÍFICO · CALLAO, PERÚ · COSCO SHIPPING · SERVIDOR ACTIVO 24/7</div>
+    <div class="diff-label">SELECCIONA TU NIVEL</div>
+    <div class="diff-grid">
+      <div class="diff-card" data-d="easy" onclick="startGame('easy')">
+        <div class="diff-icon">🟢</div>
+        <div class="diff-name dn-easy orb">EASY</div>
+        <div class="diff-desc">Aprende los fundamentos</div>
+        <div class="diff-stats mono">2 buques · Crisis c/3T · $60K</div>
+      </div>
+      <div class="diff-card" data-d="medium" onclick="startGame('medium')">
+        <div class="diff-rec">RECOMENDADO</div>
+        <div class="diff-icon">🟡</div>
+        <div class="diff-name dn-medium orb">MEDIUM</div>
+        <div class="diff-desc">Operaciones reales</div>
+        <div class="diff-stats mono">3 buques · Crisis c/2T · $45K</div>
+      </div>
+      <div class="diff-card" data-d="hard" onclick="startGame('hard')">
+        <div class="diff-icon">🔴</div>
+        <div class="diff-name dn-hard orb">HARD</div>
+        <div class="diff-desc">Alta presión operativa</div>
+        <div class="diff-stats mono">4 buques · Crisis c/T · $30K</div>
+      </div>
+      <div class="diff-card" data-d="expert" onclick="startGame('expert')">
+        <div class="diff-icon">⚫</div>
+        <div class="diff-name dn-expert orb">EXPERT</div>
+        <div class="diff-desc">Modo Chancay día 1</div>
+        <div class="diff-stats mono">5+ buques · Multi-crisis · $20K</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SIMULATOR -->
+<div id="sim">
+  <div class="topbar">
+    <div class="tb-logo orb">CHANCAY <span>OPS</span></div>
+    <div class="tb-div"></div>
+    <div class="tb-kpi"><div class="tb-lbl">DÍA</div><div class="tb-val green" id="tb-day">1/3</div></div>
+    <div class="tb-kpi"><div class="tb-lbl">TURNO</div><div class="tb-val gold" id="tb-shift">MAÑANA</div></div>
+    <div class="tb-kpi"><div class="tb-lbl">BUDGET</div><div class="tb-val green" id="tb-budget">$0</div></div>
+    <div class="tb-kpi"><div class="tb-lbl">REVENUE</div><div class="tb-val green" id="tb-rev">$0</div></div>
+    <div class="tb-kpi"><div class="tb-lbl">DEMURRAGE</div><div class="tb-val red" id="tb-dem">$0</div></div>
+    <div class="tb-kpi"><div class="tb-lbl">SAT.</div><div class="tb-val" id="tb-sat">100%</div></div>
+    <div class="tb-div"></div>
+    <div class="conn-dot" id="conn-dot"></div>
+    <div class="tb-lbl mono" id="conn-lbl">CONECTANDO...</div>
+    <div class="tb-clock mono" id="tb-clock">--:--</div>
+    <div class="diff-badge db-medium" id="diff-badge">MEDIUM</div>
+  </div>
+
+  <!-- SHIFT PROGRESS BAR -->
+  <div class="shift-prog-wrap">
+    <div class="prog-label mono">
+      <span id="prog-label">PROGRESO DEL TURNO</span>
+      <span id="prog-pct">0%</span>
+    </div>
+    <div class="prog-track"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+  </div>
+
+  <div class="sim-body">
+    <!-- LEFT KPIs -->
+    <div class="lp">
+      <div class="lp-sec">
+        <div class="lp-ttl">KPIs</div>
+        <div class="kpi">
+          <div class="kpi-lbl">MOVES/HR</div>
+          <div class="kpi-val green" id="kpi-moves">0</div>
+          <div class="kpi-sub">meta: 25 mov/hr</div>
+          <div class="kpi-bar"><div class="kpi-fill" id="kpi-moves-bar" style="width:0%;background:var(--green)"></div></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-lbl">SATISFACCIÓN</div>
+          <div class="kpi-val green" id="kpi-sat">100%</div>
+          <div class="kpi-bar"><div class="kpi-fill" id="kpi-sat-bar" style="width:100%;background:var(--green)"></div></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-lbl">SCORE TOTAL</div>
+          <div class="kpi-val gold orb" style="font-size:24px;" id="kpi-score">0</div>
+          <div class="kpi-sub" id="kpi-score-sub">de 0 puntos</div>
+        </div>
+      </div>
+      <div class="lp-sec">
+        <div class="lp-ttl">Recursos</div>
+        <div class="kpi"><div class="kpi-lbl">GRÚAS ACTIVAS</div><div class="kpi-val amber" id="kpi-cranes">0/6</div></div>
+        <div class="kpi"><div class="kpi-lbl">TRACTOS</div><div class="kpi-val" id="kpi-trucks">0/12</div></div>
+        <div class="kpi"><div class="kpi-lbl">PERSONAL</div><div class="kpi-val" id="kpi-staff">45</div></div>
+        <div class="kpi"><div class="kpi-lbl">TÉC. REEFER</div><div class="kpi-val" id="kpi-tech">3/3</div></div>
+      </div>
+      <div class="lp-sec">
+        <div class="lp-ttl">Berths</div>
+        <div id="berth-status-list"></div>
+      </div>
+    </div>
+
+    <!-- TERMINAL VISUAL -->
+    <div class="canvas" id="canvas">
+      <div class="sky day" id="sky"></div>
+      <div class="water"><div class="wwave"></div><div class="wwave"></div></div>
+      <div class="berth-zone" id="berth-zone"></div>
+      <div class="yard-zone"><div class="yard-grid" id="yard-grid"></div></div>
+      <div class="gate-bar">
+        <div class="gate-lbl mono">⬛ GATE</div>
+        <div class="lane in">IN 1</div><div class="lane in">IN 2</div>
+        <div class="lane out">OUT 1</div><div class="lane out">OUT 2</div>
+        <div class="gate-st mono">ESPERA: <span class="amber" id="gate-q">0</span> · PROC: <span class="green" id="gate-p">0</span></div>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div class="rp">
+      <div class="rp-sec">
+        <div class="rp-ttl">Turno Actual</div>
+        <div class="shift-card">
+          <div class="shift-name orb" id="shift-name">TURNO MAÑANA</div>
+          <div class="shift-time mono" id="shift-time">06:00 — 14:00</div>
+          <div class="shift-time mono green" id="shift-day">DÍA 1 DE 3 · T1/9</div>
+        </div>
+      </div>
+
+      <div class="rp-sec">
+        <div class="rp-ttl">Buques en Cola</div>
+        <div id="vessel-list"></div>
+      </div>
+
+      <div class="rp-sec">
+        <div class="rp-ttl">Panel de Decisiones</div>
+        <div id="dec-panel">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:16px 0;">
+            Selecciona un buque para asignar recursos
+          </div>
+        </div>
+        <button class="exec-btn orb" id="exec-btn" onclick="executeShift()" disabled>▶ EJECUTAR TURNO</button>
+        <button class="pause-btn orb" id="pause-btn" onclick="togglePause()" style="display:none;">⏸ PAUSAR TURNO</button>
+      </div>
+
+      <div class="rp-sec" id="live-instr-section" style="display:none;">
+        <div class="rp-ttl">Instrucciones en Vivo</div>
+        <div class="instr-panel">
+          <div class="instr-title">▸ Turno corriendo en servidor 24/7</div>
+          <div id="live-instr-content"></div>
+        </div>
+      </div>
+
+      <div class="rp-sec">
+        <div class="rp-ttl">Event Log</div>
+        <div class="ev-log" id="ev-log"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CRISIS -->
+<div class="crisis-overlay" id="crisis-overlay">
+  <div class="crisis-modal">
+    <div class="crisis-badge mono">⚠ CRISIS OPERATIVA — SERVIDOR ACTIVO</div>
+    <div class="crisis-timer mono" id="crisis-timer">30</div>
+    <div class="crisis-title" id="crisis-title"></div>
+    <div class="crisis-desc" id="crisis-desc"></div>
+    <div id="crisis-opts"></div>
+  </div>
+</div>
+
+<!-- REPORT -->
+<div class="rep-overlay" id="rep-overlay">
+  <div class="rep-modal">
+    <div class="rep-title orb" id="rep-title">REPORTE DE TURNO</div>
+    <div class="rep-sub mono" id="rep-sub"></div>
+    <div class="score-big" id="rep-score">0</div>
+    <div id="rep-rows"></div>
+    <button class="next-btn orb" id="next-btn" onclick="nextShift()">SIGUIENTE TURNO ▶</button>
+  </div>
+</div>
+
+<script>
+// ── SOCKET CONNECTION ──
+const socket = io();
+let G = {};
+let selectedVessel = null;
+let crisisTimerInt = null;
+
+// Connection status
+socket.on('connect', () => {
+  document.getElementById('conn-dot').classList.add('on');
+  document.getElementById('conn-lbl').textContent = 'SERVIDOR OK';
+  document.getElementById('conn-lbl').style.color = 'var(--green)';
+});
+socket.on('disconnect', () => {
+  document.getElementById('conn-dot').classList.remove('on');
+  document.getElementById('conn-lbl').textContent = 'RECONECTANDO...';
+  document.getElementById('conn-lbl').style.color = 'var(--red)';
+});
+
+// Game state update
+socket.on('gameState', (state) => {
+  G = state;
+  updateUI();
+});
+
+// Event
+socket.on('event', (ev) => addEventUI(ev.type, ev.msg, ev.time));
+
+// Crisis from server
+socket.on('crisis', (crisis) => showCrisis(crisis));
+socket.on('crisisResolved', () => {
+  clearInterval(crisisTimerInt);
+  document.getElementById('crisis-overlay').classList.remove('show');
+});
+
+// Shift complete
+socket.on('shiftComplete', (data) => showReport(data));
+
+// Game over
+socket.on('gameOver', (data) => showFinalReport(data));
+
+// Error
+socket.on('error', (msg) => addEventUI('danger', '⚠ ' + msg, '--:--'));
+
+// ── INTRO STARS ──
+(function(){
+  const c = document.getElementById('stars');
+  for(let i=0;i<60;i++){
+    const s = document.createElement('div');
+    s.className = 'star';
+    s.style.cssText = `left:${Math.random()*100}%;top:${Math.random()*60}%;--d:${2+Math.random()*4}s;--op:${.3+Math.random()*.7};animation-delay:${Math.random()*4}s`;
+    c.appendChild(s);
+  }
+})();
+
+// ── START GAME ──
+function startGame(diff) {
+  document.getElementById('intro').style.opacity = '0';
+  document.getElementById('intro').style.transition = 'opacity .8s';
+  setTimeout(() => {
+    document.getElementById('intro').style.display = 'none';
+    document.getElementById('sim').classList.add('show');
+    buildBerths();
+    buildYard();
+    socket.emit('startGame', diff);
+  }, 800);
+}
+
+// ── CLOCK ──
+setInterval(() => {
+  const n = new Date();
+  document.getElementById('tb-clock').textContent =
+    `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;
+}, 1000);
+
+// ── BUILD BERTHS ──
+function buildBerths() {
+  const z = document.getElementById('berth-zone');
+  z.innerHTML = '';
+  for(let i=1;i<=4;i++){
+    const b = document.createElement('div');
+    b.className = 'berth'; b.id = `berth-${i}`;
+    b.innerHTML = `<div class="berth-num mono">BERTH 0${i}</div><div class="b-dot b-free" id="bd-${i}"></div><div class="vessel-wrap" id="bv-${i}"><div style="text-align:center;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);padding:8px;">LIBRE</div></div>`;
+    z.appendChild(b);
+  }
+}
+
+// ── BUILD YARD ──
+const SL_COLORS = {COSCO:'#EF4444',EVERGREEN:'#22C55E','YANG MING':'#3B82F6',OOCL:'#94A3B8',MSC:'#F59E0B',MAERSK:'#06B6D4','CMA CGM':'#C084FC'};
+function buildYard() {
+  const g = document.getElementById('yard-grid');
+  g.innerHTML = '';
+  const blocks = [
+    {id:'A',lbl:'IMP',rows:4,bays:8,type:'imp'},{id:'B',lbl:'IMP',rows:4,bays:8,type:'imp'},
+    {id:'C',lbl:'EXP',rows:4,bays:8,type:'exp'},{id:'D',lbl:'EXP',rows:4,bays:8,type:'exp'},
+    {id:'R1',lbl:'REF❄',rows:3,bays:6,type:'ref'},{id:'R2',lbl:'REF❄',rows:3,bays:6,type:'ref'},
+    {id:'V1',lbl:'VAC',rows:4,bays:8,type:'emp'},{id:'V2',lbl:'VAC',rows:4,bays:8,type:'emp'},
+    {id:'X',lbl:'INS',rows:2,bays:5,type:'ins'},
+  ];
+  blocks.forEach(blk => {
+    const b = document.createElement('div');
+    b.className = 'yblock'; b.id = `blk-${blk.id}`;
+    const types = {imp:['imp','imp','free'],exp:['exp','exp','free'],ref:['ref','free'],emp:['emp','free'],ins:['ins','free']};
+    const arr = types[blk.type]||['free'];
+    let slots = '';
+    for(let r=0;r<blk.rows;r++) for(let c=0;c<blk.bays;c++){
+      const t = arr[Math.floor(Math.random()*arr.length)];
+      slots += `<div class="slot s-${t}" id="s-${blk.id}-${r}-${c}"></div>`;
+    }
+    b.innerHTML = `<div class="ybh"><span class="green">${blk.id}</span><span style="color:var(--muted)">${blk.lbl}</span></div><div class="yslots" style="grid-template-columns:repeat(${blk.bays},14px)">${slots}</div>`;
+    g.appendChild(b);
+  });
+}
+
+// ── UPDATE UI ──
+function updateUI() {
+  if(!G.active) return;
+
+  // Topbar
+  document.getElementById('tb-day').textContent = `${G.day}/3`;
+  document.getElementById('tb-shift').textContent = G.currentShift?.name.replace('TURNO ','') || '--';
+  document.getElementById('tb-budget').textContent = `$${(G.budget||0).toLocaleString()}`;
+  document.getElementById('tb-budget').className = `tb-val ${G.budget<5000?'red':G.budget<15000?'amber':'green'}`;
+  document.getElementById('tb-rev').textContent = `$${(G.revenue||0).toLocaleString()}`;
+  document.getElementById('tb-dem').textContent = `$${(G.demurrage||0).toLocaleString()}`;
+  document.getElementById('tb-sat').textContent = `${G.satisfaction||100}%`;
+  document.getElementById('tb-sat').className = `tb-val ${G.satisfaction<50?'red':G.satisfaction<75?'amber':'green'}`;
+
+  // Diff badge
+  const db = document.getElementById('diff-badge');
+  db.className = `diff-badge db-${G.diff}`;
+  db.textContent = (G.diff||'medium').toUpperCase();
+
+  // Sky
+  document.getElementById('sky').className = `sky ${G.currentShift?.sky||'day'}`;
+
+  // Shift info
+  document.getElementById('shift-name').textContent = `${G.currentShift?.name||'--'}`;
+  document.getElementById('shift-time').textContent = G.currentShift?.time||'--';
+  document.getElementById('shift-day').textContent = `DÍA ${G.day} DE 3 · T${G.totalShift+1}/9`;
+
+  // Progress bar
+  document.getElementById('prog-fill').style.width = `${G.shiftProgress||0}%`;
+  document.getElementById('prog-pct').textContent = `${Math.round(G.shiftProgress||0)}%`;
+  document.getElementById('prog-label').textContent = G.shiftRunning ? '⚡ TURNO CORRIENDO EN SERVIDOR' : G.paused ? '⏸ TURNO PAUSADO' : 'PROGRESO DEL TURNO';
+
+  // KPIs
+  const movRate = Math.round((G.moves||0)/(Math.max(G.shiftProgress||1,1)/100)/3600);
+  document.getElementById('kpi-moves').textContent = G.moves||0;
+  document.getElementById('kpi-moves-bar').style.width = `${Math.min((G.moves||0)/200*100,100)}%`;
+  document.getElementById('kpi-sat').textContent = `${G.satisfaction||100}%`;
+  document.getElementById('kpi-sat-bar').style.width = `${G.satisfaction||100}%`;
+  document.getElementById('kpi-sat-bar').style.background = (G.satisfaction||100)>70?'var(--green)':(G.satisfaction||100)>40?'var(--amber)':'var(--red)';
+  document.getElementById('kpi-score').textContent = G.totalScore||0;
+  document.getElementById('kpi-score-sub').textContent = `de ${(G.totalShift||0)*100} pts posibles`;
+  document.getElementById('kpi-cranes').textContent = `${G.cranes?.active||0}/${G.cranes?.total||6}`;
+  document.getElementById('kpi-trucks').textContent = `${G.trucks?.active||0}/${G.trucks?.total||12}`;
+  document.getElementById('kpi-staff').textContent = G.staff||45;
+  document.getElementById('gate-q').textContent = G.gateQueue||0;
+  document.getElementById('gate-p').textContent = G.gateProcessed||0;
+
+  // Berth status list
+  const bsl = document.getElementById('berth-status-list');
+  bsl.innerHTML = [1,2,3,4].map(i => {
+    const vid = G.berths?.[i];
+    const v = vid ? G.vessels?.find(v=>v.id===vid) : null;
+    return `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--edge);">
+      <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);">BERTH 0${i}</span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:${v?'var(--blue)':'var(--green)'};">${v?v.name.split(' ')[0]:'LIBRE'}</span>
+    </div>`;
+  }).join('');
+
+  // Vessels on berths
+  if(G.vessels) {
+    G.vessels.forEach(v => {
+      const a = G.assignments?.[v.id];
+      if(a?.berth) {
+        const bv = document.getElementById(`bv-${a.berth}`);
+        const bd = document.getElementById(`bd-${a.berth}`);
+        if(bv && bd) {
+          bd.className = 'b-dot b-busy';
+          const craneIcons = Array(a.cranes||2).fill(0).map(()=>`<div class="crane on"></div>`).join('');
+          bv.innerHTML = `<div class="vbody">
+            <div class="vname" style="color:${SL_COLORS[v.sl]||'var(--blue)'}">${v.name}</div>
+            <div class="vinfo mono">${v.sl} · ${(v.teu||0).toLocaleString()} TEU ${v.hasReefer?'· ❄ '+v.reeferCount:''}</div>
+            <div class="cranes-row">${craneIcons}<span style="font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--amber);margin-left:4px;">${a.cranes} STS</span></div>
+            <div class="vprogbar"><div class="vprogfill" style="width:${G.shiftProgress||0}%"></div></div>
+          </div>`;
+        }
+      }
+    });
+  }
+
+  // Vessel list
+  renderVesselList();
+
+  // Buttons
+  const execBtn = document.getElementById('exec-btn');
+  const pauseBtn = document.getElementById('pause-btn');
+  const liveSection = document.getElementById('live-instr-section');
+
+  if(G.shiftRunning) {
+    execBtn.style.display = 'none';
+    pauseBtn.style.display = 'block';
+    pauseBtn.textContent = G.paused ? '▶ REANUDAR TURNO' : '⏸ PAUSAR TURNO';
+    liveSection.style.display = 'block';
+    renderLiveInstructions();
+  } else {
+    execBtn.style.display = 'block';
+    pauseBtn.style.display = 'none';
+    liveSection.style.display = 'none';
+    const allAssigned = G.vessels?.every(v => G.assignments?.[v.id]?.berth !== null);
+    execBtn.disabled = !allAssigned;
+  }
+
+  // Events
+  if(G.events?.length) {
+    const log = document.getElementById('ev-log');
+    log.innerHTML = G.events.slice(0,15).map(e =>
+      `<div class="ev ${e.type}">[${e.time}] ${e.msg}</div>`
+    ).join('');
+  }
+}
+
+function renderVesselList() {
+  if(!G.vessels) return;
+  const list = document.getElementById('vessel-list');
+  list.innerHTML = G.vessels.map(v => {
+    const a = G.assignments?.[v.id];
+    return `<div class="vc ${selectedVessel===v.id?'sel':''}" onclick="selectVessel('${v.id}')">
+      <div class="vc-name" style="color:${SL_COLORS[v.sl]||'var(--blue)'}">${v.name}</div>
+      <div class="vc-row"><span>LÍNEA</span><span class="vc-val">${v.sl}</span></div>
+      <div class="vc-row"><span>TEU</span><span class="vc-val">${(v.teu||0).toLocaleString()}</span></div>
+      <div class="vc-row"><span>ETA</span><span class="vc-val">${v.eta}</span></div>
+      ${v.hasReefer?`<div class="vc-row"><span>REEFER</span><span class="vc-val amber">❄ ${v.reeferCount}</span></div>`:''}
+      <div class="vc-row"><span>BERTH</span><span class="vc-val" style="color:${a?.berth?'var(--green)':'var(--red)'};">${a?.berth?`BERTH 0${a.berth}`:'SIN ASIGNAR'}</span></div>
+    </div>`;
+  }).join('');
+}
+
+function selectVessel(id) {
+  selectedVessel = id;
+  renderVesselList();
+  renderDecisions();
+}
+
+function renderDecisions() {
+  const v = G.vessels?.find(v=>v.id===selectedVessel);
+  if(!v) return;
+  const a = G.assignments?.[v.id] || {};
+
+  const berthBtns = [1,2,3,4].map(b =>
+    `<button class="dbn ${a.berth===b?'sel':''}" onclick="assignBerth('${v.id}',${b})">B0${b}</button>`
+  ).join('');
+
+  const craneBtns = [2,3,4,5,6].map(c =>
+    `<button class="dbn ${a.cranes===c?'sel':''}" onclick="assignCranes('${v.id}',${c})">${c}🏗</button>`
+  ).join('');
+
+  const blockBtns = ['A','B','C','D'].map(b =>
+    `<button class="dbn ${a.block===b?'sel':''}" onclick="assignBlock('${v.id}','${b}')">BLQ ${b}</button>`
+  ).join('');
+
+  const reeferHtml = v.hasReefer ? `
+    <div class="dec-lbl">ZONA REEFER</div>
+    <div class="dec-opts">${['R1','R2'].map(r=>`<button class="dbn ${a.reefer===r?'sel':''}" onclick="assignReefer('${v.id}','${r}')">${r}</button>`).join('')}</div>` : '';
+
+  document.getElementById('dec-panel').innerHTML = `
+    <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:${SL_COLORS[v.sl]||'var(--blue)'};margin-bottom:8px;letter-spacing:1px;">▸ ${v.name}</div>
+    <div class="dec-lbl">BERTH</div><div class="dec-opts">${berthBtns}</div>
+    <div class="dec-lbl">GRÚAS STS ($800/hr)</div><div class="dec-opts">${craneBtns}</div>
+    <div class="dec-lbl">BLOQUE DESTINO</div><div class="dec-opts">${blockBtns}</div>
+    ${reeferHtml}`;
+}
+
+function renderLiveInstructions() {
+  if(!G.vessels) return;
+  const content = document.getElementById('live-instr-content');
+  content.innerHTML = G.vessels.filter(v=>G.assignments?.[v.id]?.berth).map(v => {
+    const a = G.assignments[v.id];
+    return `<div style="margin-bottom:8px;">
+      <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:${SL_COLORS[v.sl]||'var(--blue)'};margin-bottom:4px;">${v.name.split(' ')[0]}</div>
+      <div class="instr-row">
+        <button class="instr-btn" onclick="giveInstruction('addCrane','${v.id}')">+ Grúa</button>
+        <button class="instr-btn" onclick="giveInstruction('removeCrane','${v.id}')">- Grúa</button>
+        <button class="instr-btn" onclick="giveInstruction('priorityVessel','${v.id}')">⚡ Prioridad</button>
+      </div>
+      <div class="instr-row">
+        ${['A','B','C','D'].map(b=>`<button class="instr-btn ${a.block===b?'sel':''}" onclick="giveInstruction('reassignBlock','${v.id}','${b}')">→Blq ${b}</button>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── SOCKET ACTIONS ──
+function assignBerth(vid, berth) { socket.emit('assignBerth', { vesselId: vid, berth }); }
+function assignCranes(vid, cranes) { socket.emit('assignCranes', { vesselId: vid, cranes }); }
+function assignBlock(vid, block) { socket.emit('assignBlock', { vesselId: vid, block }); }
+function assignReefer(vid, reefer) { socket.emit('assignBlock', { vesselId: vid, block: reefer }); }
+function executeShift() { socket.emit('executeShift'); }
+function togglePause() { socket.emit('pauseShift'); }
+function nextShift() {
+  document.getElementById('rep-overlay').classList.remove('show');
+  socket.emit('nextShift');
+}
+function giveInstruction(type, vesselId, extra) {
+  const payload = { vesselId };
+  if(type === 'reassignBlock') payload.block = extra;
+  socket.emit('giveInstruction', { type, payload });
+}
+
+// ── CRISIS ──
+function showCrisis(crisis) {
+  document.getElementById('crisis-title').textContent = crisis.title;
+  document.getElementById('crisis-desc').textContent = crisis.desc;
+  const opts = document.getElementById('crisis-opts');
+  opts.innerHTML = crisis.options.map((o,i) =>
+    `<button class="copt" onclick="resolveCrisis(${i})">
+      <div class="copt-lbl">${o.label}</div>
+      <div class="copt-desc">${o.desc}</div>
+    </button>`).join('');
+
+  let t = 30;
+  document.getElementById('crisis-timer').textContent = t;
+  document.getElementById('crisis-timer').style.color = 'var(--red)';
+  clearInterval(crisisTimerInt);
+  crisisTimerInt = setInterval(() => {
+    t--;
+    document.getElementById('crisis-timer').textContent = t;
+    if(t <= 0) { clearInterval(crisisTimerInt); resolveCrisis(crisis.options.length-1); }
+  }, 1000);
+
+  document.getElementById('crisis-overlay').classList.add('show');
+}
+
+function resolveCrisis(idx) {
+  clearInterval(crisisTimerInt);
+  socket.emit('resolveCrisis', { optionIdx: idx });
+}
+
+// ── REPORT ──
+function showReport(data) {
+  const color = data.score>=80?'var(--green)':data.score>=60?'var(--gold)':'var(--red)';
+  document.getElementById('rep-title').textContent = G.totalShift>=9?'🏆 REPORTE FINAL':'REPORTE DE TURNO';
+  document.getElementById('rep-sub').textContent = `TURNO ${G.totalShift} · DÍA ${G.day}`;
+  document.getElementById('rep-score').textContent = data.score;
+  document.getElementById('rep-score').style.color = color;
+
+  document.getElementById('rep-rows').innerHTML = [
+    ['PRODUCTIVIDAD', data.prodScore, 30, 'var(--green)'],
+    ['FINANCIERO', data.finScore, 25, 'var(--gold)'],
+    ['SATISFACCIÓN', data.satScore, 20, 'var(--blue)'],
+    ['HSSE', data.hsseScore, 15, 'var(--purple)'],
+    ['GESTIÓN CRISIS', data.crisisScore, 10, 'var(--amber)'],
+  ].map(([k,v,max,c]) =>
+    `<div class="rep-row">
+      <span class="rep-k">${k}</span>
+      <div class="rep-bar"><div class="rep-fill" style="width:${v/max*100}%;background:${c}"></div></div>
+      <span class="rep-v" style="color:${c}">${v}/${max}</span>
+    </div>`).join('') +
+    `<div class="rep-row"><span class="rep-k">REVENUE</span><span class="rep-v green">$${(data.revenue||0).toLocaleString()}</span></div>
+     <div class="rep-row"><span class="rep-k">COSTOS</span><span class="rep-v red">-$${(data.costs||0).toLocaleString()}</span></div>
+     <div class="rep-row"><span class="rep-k">SCORE ACUMULADO</span><span class="rep-v gold orb" style="font-size:16px;">${data.totalScore}/${data.totalShift*100}</span></div>`;
+
+  const nb = document.getElementById('next-btn');
+  if(data.totalShift >= 9) {
+    nb.textContent = '🏆 VER RESULTADO FINAL';
+    nb.onclick = () => showFinalReport({ totalScore: data.totalScore, scores: G.scores });
+  } else {
+    nb.textContent = 'SIGUIENTE TURNO ▶';
+    nb.onclick = nextShift;
+  }
+  document.getElementById('rep-overlay').classList.add('show');
+}
+
+function showFinalReport(data) {
+  const avg = Math.round((data.totalScore||0) / Math.max(G.totalShift||1,1));
+  const rank = avg>=90?'🏆 TERMINAL MANAGER ÉLITE':avg>=75?'⭐⭐⭐⭐ OPS SUPERVISOR SR.':avg>=60?'⭐⭐⭐ OPS SUPERVISOR':avg>=45?'⭐⭐ COORDINADOR':'⭐ SIGUE PRACTICANDO';
+  const color = avg>=80?'var(--green)':avg>=60?'var(--gold)':'var(--red)';
+
+  document.getElementById('rep-title').textContent = '🏆 RESULTADO FINAL';
+  document.getElementById('rep-sub').textContent = '9 TURNOS · 3 DÍAS · PUERTO CHANCAY';
+  document.getElementById('rep-score').textContent = avg;
+  document.getElementById('rep-score').style.color = color;
+  document.getElementById('rep-rows').innerHTML = `
+    <div style="text-align:center;margin:14px 0;">
+      <div style="font-family:'Orbitron',sans-serif;font-size:15px;color:${color};margin-bottom:6px;">${rank}</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);">Dificultad: ${(G.diff||'medium').toUpperCase()}</div>
+    </div>
+    <div class="rep-row"><span class="rep-k">SCORE TOTAL</span><span class="rep-v gold">${data.totalScore||0} / ${(G.totalShift||9)*100}</span></div>
+    <div class="rep-row"><span class="rep-k">REVENUE TOTAL</span><span class="rep-v green">$${(G.revenue||0).toLocaleString()}</span></div>
+    <div class="rep-row"><span class="rep-k">DEMURRAGE TOTAL</span><span class="rep-v red">-$${(G.demurrage||0).toLocaleString()}</span></div>
+    <div style="margin-top:14px;padding:10px;background:rgba(0,255,156,.04);border:1px solid var(--edge);border-radius:8px;">
+      <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--green);margin-bottom:6px;letter-spacing:1px;">MÓDULOS LLOYD'S APLICADOS:</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);line-height:1.8;">▸ M3 Terminal Operations ✅ · ▸ M4 HSSE ✅ · ▸ M7 Economics ✅ · ▸ M8 Leadership ✅ · ▸ M9 Legal ✅</div>
+    </div>`;
+  document.getElementById('next-btn').textContent = '🔄 JUGAR DE NUEVO';
+  document.getElementById('next-btn').onclick = () => location.reload();
+  document.getElementById('rep-overlay').classList.add('show');
+}
+
+function addEventUI(type, msg, time) {
+  const log = document.getElementById('ev-log');
+  const t = time || (() => { const n=new Date(); return `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`; })();
+  const div = document.createElement('div');
+  div.className = `ev ${type}`;
+  div.textContent = `[${t}] ${msg}`;
+  log.insertBefore(div, log.firstChild);
+  if(log.children.length > 15) log.removeChild(log.lastChild);
+}
+</script>
+</body>
+</html>
