@@ -1453,7 +1453,7 @@ function updateUI(){
     renderLiveInstructions();
   } else {
     eb.style.display='block'; pb.style.display='none'; ls.style.display='none'; gs.style.display='none'; ip.style.display='none';
-    const all=G.vessels?.every(v=>G.assignments?.[v.id]?.berth!==null); eb.disabled=!all;
+    const all=G.vessels?.some(v=>G.assignments?.[v.id]?.berth!==null); eb.disabled=!all;
   }
 
   if(G.events?.length) renderEvents();
