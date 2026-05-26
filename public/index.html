@@ -1482,7 +1482,7 @@ function renderDecisions(){
   const vc=SL_COLORS[v.sl]||'var(--blue)';
   const bbtns=[1,2,3,4].map(b=>{ const tk=G.vessels?.find(vv=>vv.id!==v.id&&G.assignments?.[vv.id]?.berth===b); return `<button class="dbn ${a.berth===b?'sel':''}" onclick="${tk?'':'assignBerth(\''+v.id+'\','+b+')'}">${tk?'⚠':''}B0${b}</button>`; }).join('');
   const cbtns=[1,2,3,4,5,6].map(c=>`<button class="dbn ${a.cranes===c?'sel':''}" onclick="assignCranes('${v.id}',${c})">${c}🏗</button>`).join('');
-  const blktns=['A','B','C','D','E'].map(b=>`<button class="dbn ${a.block===b?'sel':''}" onclick="assignBlock('${v.id}','${b}')">BLQ ${b}</button>`).join('');
+  const blktns=['A','B','C','D','V1','V2','R2'].map(b=>`<button class="dbn ${a.block===b?'sel':''}" onclick="assignBlock('${v.id}','${b}')">BLQ ${b}</button>`).join('');
   const refhtml=v.hasReefer?`<div class="dlbl">ZONA REEFER</div><div class="dopts">${['R1','R2'].map(r=>`<button class="dbn ${a.reefer===r?'sel':''}" onclick="assignReefer('${v.id}','${r}')">❄${r}</button>`).join('')}</div>`:'';
   document.getElementById('dec-panel').innerHTML=`<div style="font-family:'Share Tech Mono',monospace;font-size:8px;color:${vc};margin-bottom:7px;">▸ ${v.name}</div><div class="dlbl">BERTH</div><div class="dopts">${bbtns}</div><div class="dlbl">GRÚAS STS</div><div class="dopts">${cbtns}</div><div class="dlbl">BLOQUE PATIO</div><div class="dopts">${blktns}</div>${refhtml}<div style="font-family:'Share Tech Mono',monospace;font-size:7px;color:var(--muted);margin-top:6px;padding:5px;background:rgba(0,0,0,.3);border-radius:3px;">💡 +grúas=más velocidad | Bloque lleno=redirigir en vivo</div>`;
 }
@@ -1494,7 +1494,7 @@ function renderLiveInstructions(){
     const a=G.assignments[v.id];
     return `<div class="iv"><div class="iname" style="color:${SL_COLORS[v.sl]||'var(--blue)'}">▸ ${v.name.split(' ').slice(0,2).join(' ')}</div>
     <div class="ibtns"><button class="ibtn" onclick="giveInstr('addCrane','${v.id}')">+🏗</button><button class="ibtn" onclick="giveInstr('removeCrane','${v.id}')">-🏗</button><button class="ibtn" onclick="giveInstr('priorityVessel','${v.id}')">⚡Prio</button><button class="ibtn" onclick="giveInstr('callTechnician','${v.id}')">🔧Tech</button></div>
-    <div class="ibtns" style="margin-top:2px;">${['A','B','C','D','E'].map(b=>`<button class="ibtn ${a.block===b?'sel':''}" onclick="giveInstr('reassignBlock','${v.id}','${b}')">→${b}</button>`).join('')}</div></div>`;
+    <div class="ibtns" style="margin-top:2px;">${['A','B','C','D','V1','V2','R2'].map(b=>`<button class="ibtn ${a.block===b?'sel':''}" onclick="giveInstr('reassignBlock','${v.id}','${b}')">→${b}</button>`).join('')}</div></div>`;
   }).join('')||`<div style="font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);">Sin buques activos</div>`;
 }
 
