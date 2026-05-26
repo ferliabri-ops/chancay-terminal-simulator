@@ -1574,6 +1574,8 @@ function buildRankingHTML(){
       <div class="ranking-score" style="color:${i===0?'var(--gold)':'var(--text)'}">${r.score}</div>
     </div>`).join('');
 }
+
+function showCrisis(c){
   // DRAMATIC EFFECTS
   const flash=document.getElementById('crisis-flash');
   const sirena=document.getElementById('sirena');
@@ -1584,13 +1586,8 @@ function buildRankingHTML(){
   setTimeout(()=>sirena.classList.remove('show'),5000);
 
   // 🔊 CRISIS SOUND
-  initAudio();
-  playCrisisAlarm();
-  sendNotification(
-    `CRISIS: ${c.title}`,
-    `${c.desc.substring(0,80)}... — Tienes 30 segundos para decidir.`,
-    '🚨'
-  );
+  try{ initAudio(); playCrisisAlarm(); } catch(e){}
+  try{ sendNotification(`CRISIS: ${c.title}`,`${c.desc.substring(0,80)}... — 30 segundos para decidir.`,'🚨'); } catch(e){}
 
   document.getElementById('crisis-title').textContent=c.title;
   document.getElementById('crisis-desc').textContent=c.desc;
