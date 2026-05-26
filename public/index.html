@@ -653,43 +653,56 @@ const SL_COLORS2={COSCO:'#C62828',EVERGREEN:'#1B5E20','YANG MING':'#1565C0',OOCL
 
 // ── MAIN DRAW LOOP ──
 function drawTerminal(){
-  TC.width=TC.offsetWidth; TC.height=TC.offsetHeight;
-  const W=TC.width, H=TC.height;
-  tctx.clearRect(0,0,W,H);
+  try {
+    // Only draw if simulator is visible and has dimensions
+    if(!TC.offsetWidth || !TC.offsetHeight){
+      requestAnimationFrame(drawTerminal);
+      return;
+    }
+    TC.width=TC.offsetWidth; TC.height=TC.offsetHeight;
+    const W=TC.width, H=TC.height;
+    if(W===0||H===0){ requestAnimationFrame(drawTerminal); return; }
+    tctx.clearRect(0,0,W,H);
 
-  // Layout zones (top-down aerial)
-  const Z = {
-    waterTop:    {y:0,       h:H*.08},
-    berths:      {y:H*.08,   h:H*.18},
-    apron:       {y:H*.26,   h:H*.04},
-    mainYard:    {y:H*.30,   h:H*.38},
-    secondary:   {y:H*.68,   h:H*.10},
-    gateRoad:    {y:H*.78,   h:H*.05},
-    gateZone:    {y:H*.83,   h:H*.08},
-    buildings:   {y:H*.91,   h:H*.05},
-    waterBot:    {y:H*.96,   h:H*.04},
-    waterLeft:   {x:0,       w:W*.03},
-    waterRight:  {x:W*.97,   w:W*.03},
-    terminal:    {x:W*.03,   w:W*.94},
-  };
+    // Fallback background — always draw this
+    tctx.fillStyle='#0A1A0F';
+    tctx.fillRect(0,0,W,H);
 
-  drawOceanAerial(tctx,W,H,Z);
-  drawTerminalSurface(tctx,W,H,Z);
-  drawBerthsAerial(tctx,W,H,Z);
-  drawSTSCranesAerial(tctx,W,H,Z);
-  drawApronRoad(tctx,W,H,Z);
-  drawMainYardAerial(tctx,W,H,Z);
-  drawSecondaryZone(tctx,W,H,Z);
-  drawRoadsAerial(tctx,W,H,Z);
-  drawGateAerial(tctx,W,H,Z);
-  drawBuildingsAerial(tctx,W,H,Z);
-  updateAndDrawTrucks(tctx,W,H,Z);
+    const Z = {
+      waterTop:    {y:0,       h:H*.08},
+      berths:      {y:H*.08,   h:H*.18},
+      apron:       {y:H*.26,   h:H*.04},
+      mainYard:    {y:H*.30,   h:H*.38},
+      secondary:   {y:H*.68,   h:H*.10},
+      gateRoad:    {y:H*.78,   h:H*.05},
+      gateZone:    {y:H*.83,   h:H*.08},
+      buildings:   {y:H*.91,   h:H*.05},
+      waterBot:    {y:H*.96,   h:H*.04},
+      waterLeft:   {x:0,       w:W*.03},
+      waterRight:  {x:W*.97,   w:W*.03},
+      terminal:    {x:W*.03,   w:W*.94},
+    };
 
-  drawWeather(tctx,W,H);
-  drawTideOnCanvas(tctx,W,H,Z);
-  drawHeatmap(tctx);
-  updateAndDrawArrivingShips(tctx,W,H,Z);
-  tT+=.007;
+    try{ drawOceanAerial(tctx,W,H,Z); }catch(e){ console.warn('ocean',e); }
+    try{ drawTerminalSurface(tctx,W,H,Z); }catch(e){ console.warn('surface',e); }
+    try{ drawBerthsAerial(tctx,W,H,Z); }catch(e){ console.warn('berths',e); }
+    try{ drawSTSCranesAerial(tctx,W,H,Z); }catch(e){ console.warn('cranes',e); }
+    try{ drawApronRoad(tctx,W,H,Z); }catch(e){ console.warn('apron',e); }
+    try{ drawMainYardAerial(tctx,W,H,Z); }catch(e){ console.warn('yard',e); }
+    try{ drawSecondaryZone(tctx,W,H,Z); }catch(e){ console.warn('secondary',e); }
+    try{ drawRoadsAerial(tctx,W,H,Z); }catch(e){ console.warn('roads',e); }
+    try{ drawGateAerial(tctx,W,H,Z); }catch(e){ console.warn('gate',e); }
+    try{ drawBuildingsAerial(tctx,W,H,Z); }catch(e){ console.warn('buildings',e); }
+    try{ updateAndDrawTrucks(tctx,W,H,Z); }catch(e){ console.warn('trucks',e); }
+    try{ drawWeather(tctx,W,H); }catch(e){ console.warn('weather',e); }
+    try{ drawTideOnCanvas(tctx,W,H,Z); }catch(e){ console.warn('tide',e); }
+    try{ drawHeatmap(tctx); }catch(e){ console.warn('heatmap',e); }
+    try{ updateAndDrawArrivingShips(tctx,W,H,Z); }catch(e){ console.warn('ships',e); }
+
+    tT+=.007;
+  } catch(e) {
+    console.error('drawTerminal error:', e);
+  }
   requestAnimationFrame(drawTerminal);
 }
 
@@ -1685,7 +1698,11 @@ function startGame(diff){
   document.getElementById('intro').style.transition='opacity .8s';
   setTimeout(()=>{
     document.getElementById('intro').style.display='none';
-    document.getElementById('sim').classList.add('show');
+    const sim = document.getElementById('sim');
+    sim.classList.add('show');
+    // Force layout recalc before starting canvas
+    TC.width = sim.querySelector('.canvas-wrap').offsetWidth;
+    TC.height = sim.querySelector('.canvas-wrap').offsetHeight;
     socket.emit('startGame', diff);
     try{ requestNotifications(); } catch(e){}
     try{ initAudio(); } catch(e){}
