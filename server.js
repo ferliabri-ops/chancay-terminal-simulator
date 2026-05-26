@@ -408,8 +408,8 @@ io.on('connection', (socket) => {
 
   // Ejecutar turno
   socket.on('executeShift', () => {
-    const allAssigned = GAME.vessels.every(v => GAME.assignments[v.id]?.berth !== null);
-    if (!allAssigned) { socket.emit('errMsg', 'Asigna berth a todos los buques primero'); return; }
+    const anyAssigned = GAME.vessels.some(v => GAME.assignments[v.id]?.berth !== null);
+    if (!anyAssigned) { socket.emit('errMsg', 'Asigna berth a al menos 1 buque primero'); return; }
     GAME.shiftRunning = true;
     GAME.shiftStartTime = Date.now();
     GAME.shiftProgress = 0;
