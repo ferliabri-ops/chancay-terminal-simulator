@@ -194,12 +194,15 @@ function generateVessels(diff) {
     const h = shift.startHour + Math.floor(i * 2.5);
     const adjustedH = h >= 24 ? h - 24 : h;
     const eta = `${String(adjustedH).padStart(2,'0')}:${Math.random() > 0.5 ? '30' : '00'}`;
+    const pendingContainers = Math.floor(teu * 0.6); // 60% to discharge
     vessels.push({
       id: `V${i+1}`,
       name: rnd(VESSEL_NAMES),
       sl, teu, eta, hasReefer,
       reeferCount: hasReefer ? rndInt(50, 220) : 0,
       progress: 0,
+      pendingContainers,
+      totalContainers: pendingContainers,
     });
   }
   return vessels;
@@ -240,15 +243,25 @@ function startShiftTimer() {
     GAME.shiftRemainingMs = Math.max(0, cfg.shiftDuration - elapsed);
     GAME.shiftProgress = Math.min(100, (elapsed / cfg.shiftDuration) * 100);
 
+    // Update pending containers per vessel
+    GAME.vessels.forEach(v => {
+      const a = GAME.assignments[v.id];
+      if (a?.berth && v.pendingContainers > 0) {
+        const discharged = Math.floor((a.cranes||2) * 0.8);
+        v.pendingContainers = Math.max(0, v.pendingContainers - discharged);
+      }
+    });
+
     // Movimientos basados en grúas activas
     const totalCranes = Object.values(GAME.assignments)
       .reduce((s, a) => s + (a && a.berth ? (a.cranes || 2) : 0), 0);
     GAME.cranes.active = totalCranes;
     GAME.moves = Math.round(totalCranes * 22 * (GAME.shiftProgress / 100));
 
-    // Gate activity
+    // Gate evacuation — containers leaving yard automatically
+    const baseEvac = Math.floor(GAME.gateProcessed * 0.1 + 2);
+    GAME.gateProcessed += baseEvac;
     GAME.gateQueue = rndInt(2, 20);
-    GAME.gateProcessed += rndInt(0, 1);
 
     // Broadcast cada 10 segundos
     io.emit('gameState', getPublicState());
@@ -466,32 +479,106 @@ io.on('connection', (socket) => {
         if (GAME.assignments[payload.vesselId] && GAME.cranes.active < GAME.cranes.total) {
           GAME.assignments[payload.vesselId].cranes = Math.min(6, (GAME.assignments[payload.vesselId].cranes || 2) + 1);
           const v = GAME.vessels.find(v=>v.id===payload.vesselId);
-          addEvent('info', `▸ Instrucción: +1 grúa → ${v?.name.split(' ')[0]} (${GAME.assignments[payload.vesselId].cranes} total)`);
+          addEvent('info', `▸ +1 grúa → ${v?.name.split(' ')[0]} (${GAME.assignments[payload.vesselId].cranes} total)`);
         }
         break;
       case 'removeCrane':
         if (GAME.assignments[payload.vesselId] && (GAME.assignments[payload.vesselId].cranes || 2) > 1) {
           GAME.assignments[payload.vesselId].cranes = Math.max(1, (GAME.assignments[payload.vesselId].cranes || 2) - 1);
-          addEvent('warn', `▸ Instrucción: -1 grúa asignada`);
+          addEvent('warn', `▸ -1 grúa asignada`);
         }
         break;
       case 'reassignBlock':
         if (GAME.assignments[payload.vesselId]) {
           const oldBlock = GAME.assignments[payload.vesselId].block;
           GAME.assignments[payload.vesselId].block = payload.block;
-          addEvent('info', `▸ Instrucción: carga redirigida ${oldBlock} → Bloque ${payload.block}`);
+          addEvent('info', `▸ Carga redirigida ${oldBlock} → Bloque ${payload.block}`);
         }
         break;
       case 'priorityVessel':
-        const v = GAME.vessels.find(v=>v.id===payload.vesselId);
-        addEvent('warn', `▸ Instrucción: PRIORIDAD MÁXIMA → ${v?.name.split(' ')[0]}`);
+        const pv = GAME.vessels.find(v=>v.id===payload.vesselId);
+        addEvent('warn', `▸ PRIORIDAD MÁXIMA → ${pv?.name.split(' ')[0]}`);
         break;
       case 'callTechnician':
-        addEvent('info', `▸ Instrucción: técnico de reefer despachado al patio`);
+        addEvent('info', `▸ Técnico reefer despachado`);
         GAME.budget -= 500;
         break;
+
+      // ── EVACUACIÓN DE PATIO ──
+      case 'evacuateBlock': {
+        const block = payload.block;
+        const costPerContainer = 85; // costo tracto extraportuario
+        const containers = payload.amount || 20;
+        const totalCost = containers * costPerContainer;
+        if (GAME.budget < totalCost) {
+          addEvent('danger', `▸ EVACUACIÓN FALLIDA: presupuesto insuficiente ($${totalCost.toLocaleString()} requerido)`);
+          break;
+        }
+        GAME.budget -= totalCost;
+        GAME.yardEvacuated = (GAME.yardEvacuated || 0) + containers;
+        addEvent('warn', `▸ EVACUACIÓN Bloque ${block}: ${containers} contenedores → depósito extraportuario · Costo: $${totalCost.toLocaleString()}`);
+        addEvent('info', `▸ Tractos contratados — llegada al bloque en 15 min`);
+        // Boost gate processed
+        GAME.gateProcessed += Math.floor(containers * 0.8);
+        break;
+      }
+
+      // ── DESCARGA DIRECTA (Cross-docking) ──
+      case 'crossDocking': {
+        const vId = payload.vesselId;
+        const crossV = GAME.vessels.find(v=>v.id===vId);
+        const costCross = 120; // por contenedor cross-dock
+        const crossContainers = payload.amount || 15;
+        const costTotal = crossContainers * costCross;
+        if (GAME.budget < costTotal) {
+          addEvent('danger', `▸ CROSS-DOCK FALLIDO: presupuesto insuficiente`);
+          break;
+        }
+        GAME.budget -= costTotal;
+        GAME.crossDockContainers = (GAME.crossDockContainers || 0) + crossContainers;
+        GAME.gateProcessed += crossContainers;
+        addEvent('success', `▸ DESCARGA DIRECTA activada: ${crossV?.name.split(' ')[0]} → ${crossContainers} cont. directo a tractos · $${costTotal.toLocaleString()}`);
+        addEvent('info', `▸ Camiones posicionados en berth — descarga directa sin pasar por patio`);
+        break;
+      }
+
+      // ── DEPÓSITO EXTRAPORTUARIO (overflow) ──
+      case 'extraportDepot': {
+        const depotCost = 2500; // costo fijo por activar depósito
+        const depotContainers = payload.amount || 30;
+        const depotCostTotal = depotCost + depotContainers * 45;
+        if (GAME.budget < depotCostTotal) {
+          addEvent('danger', `▸ DEPÓSITO EXTRA FALLIDO: presupuesto insuficiente`);
+          break;
+        }
+        GAME.budget -= depotCostTotal;
+        GAME.extraportContainers = (GAME.extraportContainers || 0) + depotContainers;
+        GAME.gateProcessed += depotContainers;
+        addEvent('warn', `▸ DEPÓSITO EXTRAPORTUARIO activado: ${depotContainers} cont. → almacén externo · $${depotCostTotal.toLocaleString()}`);
+        addEvent('info', `▸ Coordinando con operador de depósito — flota de tractos en camino`);
+        // Improve satisfaction slightly (clients get their cargo faster)
+        GAME.satisfaction = Math.min(100, (GAME.satisfaction || 100) + 5);
+        break;
+      }
+
+      // ── EVACUAR REEFERS ──
+      case 'evacuateReefer': {
+        const reeferCost = 150; // por contenedor reefer con tracto refrigerado
+        const reeferContainers = payload.amount || 10;
+        const reeferTotal = reeferContainers * reeferCost;
+        if (GAME.budget < reeferTotal) {
+          addEvent('danger', `▸ EVACUACIÓN REEFER FALLIDA: presupuesto insuficiente`);
+          break;
+        }
+        GAME.budget -= reeferTotal;
+        GAME.gateProcessed += reeferContainers;
+        addEvent('warn', `▸ EVACUACIÓN REEFER: ${reeferContainers} unidades → tractos refrigerados · $${reeferTotal.toLocaleString()}`);
+        addEvent('info', `▸ Cadena de frío mantenida — contenedores en tránsito a cámara externa`);
+        break;
+      }
+
       case 'openGateLane':
-        addEvent('info', `▸ Instrucción: carril adicional de gate abierto`);
+        addEvent('info', `▸ Carril adicional de gate abierto`);
         break;
     }
     io.emit('gameState', getPublicState());
