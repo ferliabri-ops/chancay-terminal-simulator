@@ -425,6 +425,16 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
           <div class="instr-title">▸ Turno 8h corriendo en servidor</div>
           <div id="instr-content"></div>
         </div>
+        <!-- EMERGENCY OPERATIONS -->
+        <div style="background:rgba(255,45,85,.05);border:1px solid rgba(255,45,85,.2);border-radius:7px;padding:8px;margin-top:7px;">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:7px;color:var(--red);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">🚨 OPERACIONES DE EMERGENCIA — PATIO FULL</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+            <button onclick="extraportDepot(30)" style="background:rgba(255,107,53,.1);border:1px solid #FF6B35;color:#FF6B35;padding:6px 4px;border-radius:4px;font-family:'Share Tech Mono',monospace;font-size:7px;cursor:pointer;line-height:1.5;">🏭 DEPÓSITO EXTRA<br><span style="color:var(--muted)">30 cont · $3,850</span></button>
+            <button onclick="evacuateReefer(10)" style="background:rgba(0,212,255,.1);border:1px solid var(--blue);color:var(--blue);padding:6px 4px;border-radius:4px;font-family:'Share Tech Mono',monospace;font-size:7px;cursor:pointer;line-height:1.5;">❄ EVACUAR REEFER<br><span style="color:var(--muted)">10 cont · $1,500</span></button>
+            <button onclick="evacuateBlock('A',20)" style="background:rgba(255,179,0,.1);border:1px solid var(--amber);color:var(--amber);padding:6px 4px;border-radius:4px;font-family:'Share Tech Mono',monospace;font-size:7px;cursor:pointer;line-height:1.5;">🚛 EVACUAR BLOQUE<br><span style="color:var(--muted)">20 cont · $1,700</span></button>
+            <button onclick="extraportDepot(50)" style="background:rgba(191,95,255,.1);border:1px solid var(--purple);color:var(--purple);padding:6px 4px;border-radius:4px;font-family:'Share Tech Mono',monospace;font-size:7px;cursor:pointer;line-height:1.5;">🏭 DEPOT MASIVO<br><span style="color:var(--muted)">50 cont · $4,750</span></button>
+          </div>
+        </div>
       </div>
       <div class="rpsec" id="gate-sec" style="display:none;">
         <div class="rptitle">Control de Gate</div>
@@ -1453,7 +1463,9 @@ function updateUI(){
     renderLiveInstructions();
   } else {
     eb.style.display='block'; pb.style.display='none'; ls.style.display='none'; gs.style.display='none'; ip.style.display='none';
-    const all=G.vessels?.every(v=>G.assignments?.[v.id]?.berth!==null); eb.disabled=!all;
+    const any=G.vessels?.some(v=>G.assignments?.[v.id]?.berth!==null);
+    const hasVessels=G.vessels?.length>0;
+    eb.disabled=!(any&&hasVessels);
   }
 
   if(G.events?.length) renderEvents();
@@ -1468,6 +1480,7 @@ function renderVesselList(){
       <div class="vc-row"><span>TEU</span><span class="vc-val">${(v.teu||0).toLocaleString()}</span></div>
       <div class="vc-row"><span>ETA</span><span class="vc-val">${v.eta}</span></div>
       ${v.hasReefer?`<div class="vc-row"><span>REEFER</span><span class="vc-val a">❄ ${v.reeferCount}</span></div>`:''}
+      ${v.pendingContainers!==undefined?`<div class="vc-row"><span>PENDIENTE DESCARGA</span><span class="vc-val ${v.pendingContainers>0?'a':'g'}">${v.pendingContainers>0?v.pendingContainers+' cont':'✅ COMPLETO'}</span></div>`:''}
       <div style="text-align:right;margin-bottom:2px;"><button onclick="event.stopPropagation();showBayPlan('${v.id}')" style="background:transparent;border:1px solid var(--edge);color:var(--muted);padding:2px 5px;border-radius:2px;font-family:'Share Tech Mono',monospace;font-size:7px;cursor:pointer;">📋 BAY PLAN</button></div>
       <div class="vc-row"><span>BERTH</span><span class="vc-val" style="color:${a?.berth?'var(--green)':'var(--red)'}">${a?.berth?`B0${a.berth}`:'⚠ LIBRE'}</span></div>
     </div>`;
@@ -1494,7 +1507,11 @@ function renderLiveInstructions(){
     const a=G.assignments[v.id];
     return `<div class="iv"><div class="iname" style="color:${SL_COLORS[v.sl]||'var(--blue)'}">▸ ${v.name.split(' ').slice(0,2).join(' ')}</div>
     <div class="ibtns"><button class="ibtn" onclick="giveInstr('addCrane','${v.id}')">+🏗</button><button class="ibtn" onclick="giveInstr('removeCrane','${v.id}')">-🏗</button><button class="ibtn" onclick="giveInstr('priorityVessel','${v.id}')">⚡Prio</button><button class="ibtn" onclick="giveInstr('callTechnician','${v.id}')">🔧Tech</button></div>
-    <div class="ibtns" style="margin-top:2px;">${['A','B','C','D','V1','V2','R2'].map(b=>`<button class="ibtn ${a.block===b?'sel':''}" onclick="giveInstr('reassignBlock','${v.id}','${b}')">→${b}</button>`).join('')}</div></div>`;
+    <div class="ibtns" style="margin-top:2px;">${['A','B','C','D','V1','V2','R2'].map(b=>`<button class="ibtn ${a.block===b?'sel':''}" onclick="giveInstr('reassignBlock','${v.id}','${b}')">→${b}</button>`).join('')}</div>
+    <div class="ibtns" style="margin-top:3px;border-top:1px solid rgba(255,45,85,.2);padding-top:3px;">
+      <button class="ibtn" style="color:var(--amber);border-color:var(--amber);" onclick="evacuateBlock('${a.block||'A'}')">🚛 EVACUAR ${a.block||'A'}</button>
+      <button class="ibtn" style="color:var(--blue);border-color:var(--blue);" onclick="crossDock('${v.id}')">⚡ CROSS-DOCK</button>
+    </div></div>`;
   }).join('')||`<div style="font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);">Sin buques activos</div>`;
 }
 
@@ -1509,6 +1526,24 @@ function executeShift(){ socket.emit('executeShift'); }
 function togglePause(){ socket.emit('pauseShift'); }
 function nextShift(){ document.getElementById('rep-overlay').classList.remove('show'); socket.emit('nextShift'); }
 function giveInstr(type,vid,extra){ socket.emit('giveInstruction',{type,payload:{vesselId:vid,block:extra}}); }
+
+// ── EMERGENCY OPERATIONS ──
+function evacuateBlock(block, amount=20){
+  socket.emit('giveInstruction',{type:'evacuateBlock',payload:{block,amount}});
+  addEv('warn',`▸ Evacuando Bloque ${block} → depósito extraportuario`);
+}
+function crossDock(vid, amount=15){
+  socket.emit('giveInstruction',{type:'crossDocking',payload:{vesselId:vid,amount}});
+  addEv('info',`▸ Descarga directa activada → tractos en berth`);
+}
+function extraportDepot(amount=30){
+  socket.emit('giveInstruction',{type:'extraportDepot',payload:{amount}});
+  addEv('warn',`▸ Depósito extraportuario activado`);
+}
+function evacuateReefer(amount=10){
+  socket.emit('giveInstruction',{type:'evacuateReefer',payload:{amount}});
+  addEv('warn',`▸ Evacuación reefer → tractos refrigerados`);
+}
 function toggleGate(id){
   gateLanes[id]=!gateLanes[id];
   const el=document.getElementById('gl-'+id);
