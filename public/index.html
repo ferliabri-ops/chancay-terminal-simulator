@@ -1463,9 +1463,10 @@ function updateUI(){
     renderLiveInstructions();
   } else {
     eb.style.display='block'; pb.style.display='none'; ls.style.display='none'; gs.style.display='none'; ip.style.display='none';
-    const any=G.vessels?.some(v=>G.assignments?.[v.id]?.berth!==null);
+    const assignedCount=G.vessels?.filter(v=>G.assignments?.[v.id]?.berth!==null).length||0;
+    const requiredBerths=Math.min(4,G.vessels?.length||0);
     const hasVessels=G.vessels?.length>0;
-    eb.disabled=!(any&&hasVessels);
+    eb.disabled=!(hasVessels&&assignedCount>=requiredBerths);
   }
 
   if(G.events?.length) renderEvents();
