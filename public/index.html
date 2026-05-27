@@ -525,6 +525,23 @@ socket.on('gameState',(s)=>{
 });
 socket.on('event',(e)=>addEv(e.type,e.msg,e.time));
 socket.on('crisis',(c)=>showCrisis(c));
+socket.on('evacuateYard', ({block, amount}) => {
+  // Actually free slots in the yard visually
+  let freed = 0;
+  const blocksToEvacuate = block === 'ALL' ? Object.keys(yardState) :
+                           block === 'REEFER' ? ['R1','R2'] : [block];
+
+  blocksToEvacuate.forEach(blk => {
+    if (!yardState[blk]) return;
+    const filledSlots = yardState[blk].slots.filter(s => s.status && s.status !== 'free');
+    const toFree = Math.min(Math.ceil(amount / blocksToEvacuate.length), filledSlots.length);
+    for (let i = 0; i < toFree && freed < amount; i++) {
+      filledSlots[i].status = 'free';
+      freed++;
+    }
+  });
+  addEv('success', `▸ ${freed} slots liberados en patio`);
+});
 socket.on('crisisResolved',()=>{ clearInterval(crisisInt); document.getElementById('crisis-overlay').classList.remove('show'); });
 socket.on('shiftComplete',(d)=>{
   sendNotification('TURNO COMPLETADO',`Score: ${d.score}/100 · Revenue: $${(d.revenue||0).toLocaleString()}`, '✅');

@@ -511,19 +511,19 @@ io.on('connection', (socket) => {
       // ── EVACUACIÓN DE PATIO ──
       case 'evacuateBlock': {
         const block = payload.block;
-        const costPerContainer = 85; // costo tracto extraportuario
         const containers = payload.amount || 20;
-        const totalCost = containers * costPerContainer;
+        const totalCost = containers * 85;
         if (GAME.budget < totalCost) {
           addEvent('danger', `▸ EVACUACIÓN FALLIDA: presupuesto insuficiente ($${totalCost.toLocaleString()} requerido)`);
           break;
         }
         GAME.budget -= totalCost;
         GAME.yardEvacuated = (GAME.yardEvacuated || 0) + containers;
-        addEvent('warn', `▸ EVACUACIÓN Bloque ${block}: ${containers} contenedores → depósito extraportuario · Costo: $${totalCost.toLocaleString()}`);
-        addEvent('info', `▸ Tractos contratados — llegada al bloque en 15 min`);
-        // Boost gate processed
         GAME.gateProcessed += Math.floor(containers * 0.8);
+        addEvent('warn', `▸ EVACUACIÓN Bloque ${block}: ${containers} cont → depósito extraportuario · $${totalCost.toLocaleString()}`);
+        addEvent('info', `▸ Tractos contratados — llegada al bloque en 15 min`);
+        // Signal frontend to free yard slots
+        io.emit('evacuateYard', { block, amount: containers });
         break;
       }
 
@@ -548,9 +548,8 @@ io.on('connection', (socket) => {
 
       // ── DEPÓSITO EXTRAPORTUARIO (overflow) ──
       case 'extraportDepot': {
-        const depotCost = 2500; // costo fijo por activar depósito
         const depotContainers = payload.amount || 30;
-        const depotCostTotal = depotCost + depotContainers * 45;
+        const depotCostTotal = 2500 + depotContainers * 45;
         if (GAME.budget < depotCostTotal) {
           addEvent('danger', `▸ DEPÓSITO EXTRA FALLIDO: presupuesto insuficiente`);
           break;
@@ -558,18 +557,18 @@ io.on('connection', (socket) => {
         GAME.budget -= depotCostTotal;
         GAME.extraportContainers = (GAME.extraportContainers || 0) + depotContainers;
         GAME.gateProcessed += depotContainers;
-        addEvent('warn', `▸ DEPÓSITO EXTRAPORTUARIO activado: ${depotContainers} cont. → almacén externo · $${depotCostTotal.toLocaleString()}`);
-        addEvent('info', `▸ Coordinando con operador de depósito — flota de tractos en camino`);
-        // Improve satisfaction slightly (clients get their cargo faster)
         GAME.satisfaction = Math.min(100, (GAME.satisfaction || 100) + 5);
+        addEvent('warn', `▸ DEPÓSITO EXTRAPORTUARIO: ${depotContainers} cont → almacén externo · $${depotCostTotal.toLocaleString()}`);
+        addEvent('info', `▸ Flota de tractos en camino — liberando patio`);
+        // Free multiple blocks
+        io.emit('evacuateYard', { block: 'ALL', amount: depotContainers });
         break;
       }
 
       // ── EVACUAR REEFERS ──
       case 'evacuateReefer': {
-        const reeferCost = 150; // por contenedor reefer con tracto refrigerado
         const reeferContainers = payload.amount || 10;
-        const reeferTotal = reeferContainers * reeferCost;
+        const reeferTotal = reeferContainers * 150;
         if (GAME.budget < reeferTotal) {
           addEvent('danger', `▸ EVACUACIÓN REEFER FALLIDA: presupuesto insuficiente`);
           break;
@@ -577,7 +576,8 @@ io.on('connection', (socket) => {
         GAME.budget -= reeferTotal;
         GAME.gateProcessed += reeferContainers;
         addEvent('warn', `▸ EVACUACIÓN REEFER: ${reeferContainers} unidades → tractos refrigerados · $${reeferTotal.toLocaleString()}`);
-        addEvent('info', `▸ Cadena de frío mantenida — contenedores en tránsito a cámara externa`);
+        addEvent('info', `▸ Cadena de frío mantenida — contenedores en tránsito`);
+        io.emit('evacuateYard', { block: 'REEFER', amount: reeferContainers });
         break;
       }
 
