@@ -526,21 +526,12 @@ socket.on('gameState',(s)=>{
 socket.on('event',(e)=>addEv(e.type,e.msg,e.time));
 socket.on('crisis',(c)=>showCrisis(c));
 socket.on('evacuateYard', ({block, amount}) => {
-  // Actually free slots in the yard visually
-  let freed = 0;
-  const blocksToEvacuate = block === 'ALL' ? Object.keys(yardState) :
-                           block === 'REEFER' ? ['R1','R2'] : [block];
-
-  blocksToEvacuate.forEach(blk => {
-    if (!yardState[blk]) return;
-    const filledSlots = yardState[blk].slots.filter(s => s.status && s.status !== 'free');
-    const toFree = Math.min(Math.ceil(amount / blocksToEvacuate.length), filledSlots.length);
-    for (let i = 0; i < toFree && freed < amount; i++) {
-      filledSlots[i].status = 'free';
-      freed++;
-    }
-  });
-  addEv('success', `▸ ${freed} slots liberados en patio`);
+  // Schedule evacuation with 15-min realistic delay
+  // In simulator: 15 real minutes = 900,000ms
+  // For testing we use 60 seconds to see it work
+  const delayMs = G.diff==='easy' ? 30000 : 60000; // 30s easy, 60s others
+  scheduleEvacuation(block, amount, delayMs);
+  addEv('warn', `▸ Tractos contratados — llegando en ${delayMs/60000} min reales`);
 });
 socket.on('crisisResolved',()=>{ clearInterval(crisisInt); document.getElementById('crisis-overlay').classList.remove('show'); });
 socket.on('shiftComplete',(d)=>{
@@ -653,22 +644,23 @@ const tctx = TC.getContext('2d');
 let tT=0, trucks=[], yardState={};
 let berthRects=[], yardRects={};
 
-// ── YARD INIT ──
+// ── YARD INIT — empieza casi vacío como la realidad ──
 function initYard(){
   const blocks=['A','B','C','D','R1','R2','V1','V2','X'];
   const types={A:'imp',B:'imp',C:'exp',D:'exp',R1:'ref',R2:'ref',V1:'emp',V2:'emp',X:'ins'};
   blocks.forEach(b=>{
     const t=types[b]||'emp';
     const rows=b.length>1?3:4, bays=b==='X'?5:b.startsWith('R')?6:8;
-    yardState[b]={type:t,rows,bays,slots:[]};
+    yardState[b]={type:t,rows,bays,slots:[],evacuating:false,evacuationTimer:0};
     for(let r=0;r<rows;r++) for(let c=0;c<bays;c++){
+      // Start at ~20% occupancy — realistic start of shift
       const rand=Math.random();
       let st='free';
-      if(t==='imp') st=rand<.6?'imp':rand<.75?'free':'emp';
-      else if(t==='exp') st=rand<.55?'exp':rand<.7?'free':'emp';
-      else if(t==='ref') st=rand<.65?'ref':'free';
-      else if(t==='emp') st=rand<.45?'emp':'free';
-      else if(t==='ins') st=rand<.4?'ins':'free';
+      if(t==='imp') st=rand<.20?'imp':'free';
+      else if(t==='exp') st=rand<.18?'exp':'free';
+      else if(t==='ref') st=rand<.15?'ref':'free';
+      else if(t==='emp') st=rand<.10?'emp':'free';
+      else if(t==='ins') st=rand<.05?'ins':'free';
       yardState[b].slots.push({r,c,status:st,id:b+'-R'+(r+1)+'B'+(c+1)});
     }
   });
@@ -1357,8 +1349,54 @@ function showPopup(x,y,slot){
 }
 function closePopup(){ document.getElementById('slot-popup').classList.remove('show'); }
 
+// ── CONTAINER DROP — proporcional a turno 8 horas ──
+// En 8 horas un buque de 12,000 TEU descarga ~6,000 TEU
+// Con 3 grúas a 25 mov/hr = 75 mov/hr = 600 mov en 8 hrs
+// Intervalo real: un contenedor cada ~48 segundos por grúa
+// En simulador: dropeamos cada 30 segundos por buque activo
+let lastContainerDrop = 0;
+setInterval(()=>{
+  if(!G.shiftRunning||!G.vessels) return;
+  const now = Date.now();
+  G.vessels.forEach(v=>{
+    const a=G.assignments?.[v.id];
+    if(!a?.berth) return;
+    if(v.pendingContainers<=0) return;
+    // Rate: based on cranes, one container every ~48 real seconds per crane
+    // In 8h shift with 3 cranes = ~1800 containers total
+    const cranes = a.cranes||2;
+    const probability = cranes * 0.15; // lower = more realistic speed
+    if(Math.random() < probability){
+      const block = a.block||'A';
+      const status = v.hasReefer&&Math.random()<0.3?'ref':'imp';
+      dropContainerOnYard(block, status);
+    }
+  });
+}, 30000); // every 30 seconds = realistic pace
+
+// ── EVACUATION with real delay (15 min = 900 seconds) ──
+// We simulate this with a visual timer
+let evacuationTimers = {};
+
+function scheduleEvacuation(block, amount, delayMs=900000){
+  const blk = block==='REEFER'?['R1','R2']:block==='ALL'?Object.keys(yardState):[block];
+  addEv('info', `▸ Tractos en camino — llegada en ~${Math.round(delayMs/60000)} min`);
+  blk.forEach(b=>{ if(yardState[b]){ yardState[b].evacuating=true; yardState[b].evacuationTimer=Date.now()+delayMs; }});
+  setTimeout(()=>{
+    let freed=0;
+    blk.forEach(b=>{
+      if(!yardState[b]) return;
+      yardState[b].evacuating=false;
+      const filled=yardState[b].slots.filter(s=>s.status&&s.status!=='free');
+      const toFree=Math.min(Math.ceil(amount/blk.length),filled.length);
+      for(let i=0;i<toFree&&freed<amount;i++){ filled[i].status='free'; freed++; }
+    });
+    addEv('success',`▸ ✅ EVACUACIÓN COMPLETADA: ${freed} slots liberados`);
+  }, delayMs);
+}
+
 // ── CONTAINER DROP ANIMATION ──
-function dropContainerOnYard(block,status){
+function dropContainerOnYard(block, status){
   const cwrap=document.getElementById('cwrap');
   if(!yardRects[block]||!yardState[block]) return;
   const free=yardState[block].slots.find(s=>!s.status||s.status==='free');
@@ -1373,16 +1411,6 @@ function dropContainerOnYard(block,status){
   free.status=status; free.isNew=true; free.addedAt=Date.now();
   setTimeout(()=>div.remove(),900);
 }
-
-setInterval(()=>{
-  if(!G.shiftRunning||!G.vessels) return;
-  G.vessels.forEach(v=>{
-    const a=G.assignments?.[v.id];
-    if(a?.berth&&Math.random()<.4){
-      dropContainerOnYard(a.block||'A',v.hasReefer&&Math.random()<.3?'ref':'imp');
-    }
-  });
-},5000);
 
 // Start canvas
 drawTerminal();
@@ -1607,18 +1635,7 @@ function dropContainerOnYard(block, status){
   setTimeout(()=>div.remove(), 900);
 }
 
-// Spawn containers when shift runs
-setInterval(()=>{
-  if(!G.shiftRunning||!G.vessels) return;
-  G.vessels.forEach(v=>{
-    const a=G.assignments?.[v.id];
-    if(a?.berth&&Math.random()<.3){
-      const block=a.block||'A';
-      const status=v.hasReefer&&Math.random()<.3?'ref':'imp';
-      dropContainerOnYard(block,status);
-    }
-  });
-},4000);
+// NOTE: Container drop rate is now controlled by the 30-second interval above (realistic 8h pace)
 
 // ── RANKING SYSTEM ──
 const RANKINGS = JSON.parse(localStorage.getItem('rankings')||'[]');
@@ -1962,6 +1979,13 @@ function drawHeatmap(ctx){
     // Occ text
     ctx.fillStyle='rgba(255,255,255,.8)'; ctx.font=`bold 10px 'Orbitron'`; ctx.textAlign='center';
     ctx.fillText(Math.round(occ*100)+'%',rect.x+rect.w*.5,rect.y+rect.h*.5);
+    // Evacuation indicator
+    if(bdata.evacuating){
+      const remaining = Math.max(0, bdata.evacuationTimer - Date.now());
+      const mins = Math.ceil(remaining/60000);
+      ctx.fillStyle='rgba(255,179,0,.9)'; ctx.font=`bold 8px 'Share Tech Mono'`; ctx.textAlign='center';
+      ctx.fillText(`🚛 ${mins}min`,rect.x+rect.w*.5,rect.y+rect.h*.7);
+    }
   });
 }
 
